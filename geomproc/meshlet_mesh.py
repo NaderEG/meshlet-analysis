@@ -44,5 +44,54 @@ class meshlet_mesh:
         
     
     def tipsify(self, I, k):
-        
+        self.mesh.compute_vif()
+        L = [len(adjacent_triangles) for adjacent_triangles in self.mesh.vif]
+        C = [0 for vertex in self.mesh.vertex]
+        D = []
+        E = [False for faces in self.mesh.face]
+        O = []
+        f = 0
+        s = k+1
+        i = 1
+
+        while f >= 0:
+            N = {}
+            for t in self.mesh.vif[f]:
+                if not E[t]:
+                    for v in self.mesh.face[t]:
+                        O.append(v)
+                        D.append(v)
+                        N.add(v)
+                        L[v] = L[v]-1
+                        if s - C[v] > k:
+                            C[v] = s
+                            s +=1
+            f = getNextVertex(i, k, N, C, s, L, D)
+        return O
+
+    def getNextVertex(i, k, N, C, s, L, D):
+        n = -1
+        p = -1
+        for v in N:
+            if L[v] > 0:
+                p = 0
+                if s-C[v]+2*L[v] <= k:
+                    p = s-C[v]
+                if p > m:
+                    m = p
+                    n = v
+        if n == -1:
+            n = skipDeadEnd(L, D, i)
+        return n
+
+    def skipDeadEnd(L, D, i):
+        while D:
+            d = D.pop()
+            if L[d] > 0:
+                return d
+        while i < len(self.mesh.vertex):
+            i = i+1
+            if L[i] > 0:
+                return i
+        return -1
 
