@@ -37,3 +37,12 @@ class meshlet_mesh:
     Stores the primitives (triangles) of a mesh in a specific order
     such that they can be access by the meshlet descriptors.
     """
+    def __init__(self, mesh, algorithm='nvidia'):
+        self.mesh = mesh
+        if algorithm == 'nvidia':
+            return False
+        
+    
+    def tipsify(self, I, k):
+        
+
