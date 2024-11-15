@@ -15,6 +15,10 @@ import copy
 import math
 import random
 import os
+import unittest
+
+from .creation import *
+from .mesh import *
 
 class meshlet_mesh:
     """A class that represents a mesh subdivided into meshlets.
@@ -37,61 +41,89 @@ class meshlet_mesh:
     Stores the primitives (triangles) of a mesh in a specific order
     such that they can be access by the meshlet descriptors.
     """
+
     def __init__(self, mesh, algorithm='nvidia'):
         self.mesh = mesh
-        if algorithm == 'nvidia':
-            return False
-        
-    
-    def tipsify(self, I, k):
+
+    def skipDeadEnd(self, L, D, i):
+        while D:
+            d = D.pop()
+            if L[d] > 0:
+                return d
+        while i < len(self.mesh.vertex) - 1:
+            i += 1
+            if L[i] > 0:
+                return i
+        return -1
+
+    def getNextVertex(self, i, k, N, C, s, L, D):
+        p = -1
+        n = -1
+        m = -1
+        for v in N:
+            if L[v] > 0:
+                p = 0
+                if s - C[v] + 2 * L[v] <= k:
+                    p = s - C[v]
+                if p > m:
+                    m = p
+                    n = v
+        if n == -1:
+            n = self.skipDeadEnd(L, D, i)
+        return n
+
+    def tipsify(self, k):
         self.mesh.compute_vif()
         L = [len(adjacent_triangles) for adjacent_triangles in self.mesh.vif]
-        C = [0 for vertex in self.mesh.vertex]
+        C = [0 for _ in self.mesh.vertex]
         D = []
-        E = [False for faces in self.mesh.face]
+        E = [False for _ in self.mesh.face]
         O = []
         f = 0
-        s = k+1
+        s = k + 1
         i = 1
 
         while f >= 0:
-            N = {}
+            N = set()
             for t in self.mesh.vif[f]:
                 if not E[t]:
                     for v in self.mesh.face[t]:
                         O.append(v)
                         D.append(v)
                         N.add(v)
-                        L[v] = L[v]-1
+                        L[v] -= 1
                         if s - C[v] > k:
                             C[v] = s
-                            s +=1
-            f = getNextVertex(i, k, N, C, s, L, D)
+                            s += 1
+                    E[t] = True
+            f = self.getNextVertex(i, k, N, C, s, L, D)
         return O
 
-    def getNextVertex(i, k, N, C, s, L, D):
-        n = -1
-        p = -1
-        for v in N:
-            if L[v] > 0:
-                p = 0
-                if s-C[v]+2*L[v] <= k:
-                    p = s-C[v]
-                if p > m:
-                    m = p
-                    n = v
-        if n == -1:
-            n = skipDeadEnd(L, D, i)
-        return n
 
-    def skipDeadEnd(L, D, i):
-        while D:
-            d = D.pop()
-            if L[d] > 0:
-                return d
-        while i < len(self.mesh.vertex):
-            i = i+1
-            if L[i] > 0:
-                return i
-        return -1
+    
+
+    
+class test_meshlet_mesh(unittest.TestCase):
+    def test_tipsify(self):
+        flag = True
+
+        tm = create_torus(1.0, 0.33, 90, 30)
+        tm.compute_connectivity()
+        tm_meshlet = meshlet_mesh(tm)
+        tipsified_vertex_list = [v for v in tm_meshlet.tipsify(0)]
+        for i in range(len(tm.vertex)):
+            if i not in tipsified_vertex_list:
+                flag = False
+        
+        self.assertEqual(True, flag)
+        
+        
+
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+
 
