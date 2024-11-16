@@ -19,6 +19,10 @@ import unittest
 
 from .creation import *
 from .mesh import *
+from .meshlet import *
+
+VERTEX_BUFFER_CAP = 64
+PRIMITIVE_BUFFER_CAP = 126
 
 class meshlet_mesh:
     """A class that represents a mesh subdivided into meshlets.
@@ -44,6 +48,18 @@ class meshlet_mesh:
 
     def __init__(self, mesh, algorithm='nvidia'):
         self.mesh = mesh
+        global_buffer = mesh.vertex
+
+        if algorithm == 'nvidia':
+            meshlet_triangles = self.tipsify(126)
+
+            seen = set()
+            meshlet_vertices = [x for x in meshlet_triangles if not (x in seen or seen.add(x))]
+
+
+
+
+
 
     def skipDeadEnd(self, L, D, i):
         while D:
@@ -104,18 +120,19 @@ class meshlet_mesh:
 
     
 class test_meshlet_mesh(unittest.TestCase):
-    def test_tipsify(self):
+    def test_tipsify_vertices(self):
         flag = True
 
         tm = create_torus(1.0, 0.33, 90, 30)
         tm.compute_connectivity()
         tm_meshlet = meshlet_mesh(tm)
-        tipsified_vertex_list = [v for v in tm_meshlet.tipsify(0)]
+        tipsified_vertex_list = [v for v in tm_meshlet.tipsify(256)]
         for i in range(len(tm.vertex)):
             if i not in tipsified_vertex_list:
                 flag = False
         
         self.assertEqual(True, flag)
+
         
         
 
