@@ -48,13 +48,51 @@ class meshlet_mesh:
 
     def __init__(self, mesh, algorithm='nvidia'):
         self.mesh = mesh
-        global_buffer = mesh.vertex
 
         if algorithm == 'nvidia':
             meshlet_triangles = self.tipsify(126)
+            self.meshlet = []
 
             seen = set()
             meshlet_vertices = [x for x in meshlet_triangles if not (x in seen or seen.add(x))]
+
+            vertex_temp = []
+            triangle_count = 0
+            vertex_begin = 0
+            prim_begin = 0
+            vertex_begin = 0
+
+            while prim_begin < len(meshlet_triangles) or vertex_begin < len(meshlet_vertices):
+
+                for idx in range(prim_begin, len(meshlet_triangles)-2, 3):
+                    i, j, k = meshlet_triangles[idx], meshlet_triangles[idx+1], meshlet_triangles[idx+2]
+                    if len(set(vertex_temp + [i, j, k])) <= VERTEX_BUFFER_CAP:
+                        if triangle_count < PRIMITIVE_BUFFER_CAP:
+                            for vertex in [i, j, k]:
+                                if vertex not in vertex_temp:
+                                    vertex_temp.append(vertex)
+                            triangle_count+=1
+                        else:
+                            self.meshlet.append(meshlet(len(vertex_temp), triangle_count, vertex_begin, prim_begin))
+                            prim_begin = prim_begin + 3*triangle_count + 1
+                            vertex_begin = vertex_begin + len(vertex_temp) + 1
+                            vertex_temp = []
+                            break
+
+                    else:
+                        self.meshlet.append(meshlet(len(vertex_temp), triangle_count, vertex_begin, prim_begin))
+                        prim_begin = prim_begin + 3*triangle_count + 1
+                        vertex_begin = vertex_begin + len(vertex_temp) + 1
+                        vertex_temp = []
+                        break
+
+                            
+
+
+
+                
+                
+                
 
 
 
