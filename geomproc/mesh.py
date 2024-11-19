@@ -21,6 +21,7 @@ from .write_options import *
 from .misc import *
 from .pcloud import *
 from .kdtree import *
+from .meshlet_mesh import *
 
 
 # A basic triangle mesh data structure
@@ -1696,3 +1697,7 @@ class mesh:
         """
 
         self.vertex += scale*np.random.random(self.vertex.shape)
+
+    def generate_meshlets(self, method='nvidia', vertex_max=64, triangle_max=126):
+        return meshlet_mesh(self, method, vertex_max, triangle_max)
+

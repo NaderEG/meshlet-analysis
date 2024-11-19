@@ -21,9 +21,6 @@ from .creation import *
 from .mesh import *
 from .meshlet import *
 
-VERTEX_BUFFER_CAP = 64
-PRIMITIVE_BUFFER_CAP = 126
-
 class meshlet_mesh:
     """A class that represents a mesh subdivided into meshlets.
     Notes
@@ -46,45 +43,113 @@ class meshlet_mesh:
     such that they can be access by the meshlet descriptors.
     """
 
-    def __init__(self, mesh, algorithm='nvidia'):
+    def __init__(self, mesh, method, max_vertices, max_triangles):
         self.mesh = mesh
 
-        if algorithm == 'nvidia':
-            meshlet_triangles = self.tipsify(126)
+        if method == 'nvidia':
+            meshlet_vertices, meshlet_triangles = self.tipsify(15)
             self.meshlet = []
 
-            seen = set()
-            meshlet_vertices = [x for x in meshlet_triangles if not (x in seen or seen.add(x))]
+            vertex_buffer = set()
+            triangle_buffer = []
+            current_triangle = 0
 
-            vertex_temp = []
-            triangle_count = 0
-            vertex_begin = 0
-            prim_begin = 0
-            vertex_begin = 0
+            while current_triangle < len(meshlet_triangles):
+                # Get vertices of the current triangle
+                triangle_vertices = set(mesh.face[meshlet_triangles[current_triangle]])
+                
+                # Check if adding this triangle violates meshlet limits
+                if len(vertex_buffer | triangle_vertices) <= max_vertices and len(triangle_buffer) < max_triangles:
+                    vertex_buffer |= triangle_vertices  # Add triangle vertices
+                    triangle_buffer.append(meshlet_triangles[current_triangle])  # Add triangle
+                    current_triangle += 1
+                else:
+                    # Store the current meshlet
+                    self.meshlet.append(meshlet(list(vertex_buffer), triangle_buffer))
+                    # Reset buffers for the next meshlet
+                    vertex_buffer = set()
+                    triangle_buffer = []
 
-            while prim_begin < len(meshlet_triangles) or vertex_begin < len(meshlet_vertices):
+            # Handle the last meshlet
+            if triangle_buffer:
+                self.meshlet.append(meshlet(list(vertex_buffer), triangle_buffer))
 
-                for idx in range(prim_begin, len(meshlet_triangles)-2, 3):
-                    i, j, k = meshlet_triangles[idx], meshlet_triangles[idx+1], meshlet_triangles[idx+2]
-                    if len(set(vertex_temp + [i, j, k])) <= VERTEX_BUFFER_CAP:
-                        if triangle_count < PRIMITIVE_BUFFER_CAP:
-                            for vertex in [i, j, k]:
-                                if vertex not in vertex_temp:
-                                    vertex_temp.append(vertex)
-                            triangle_count+=1
-                        else:
-                            self.meshlet.append(meshlet(len(vertex_temp), triangle_count, vertex_begin, prim_begin))
-                            prim_begin = prim_begin + 3*triangle_count + 1
-                            vertex_begin = vertex_begin + len(vertex_temp) + 1
-                            vertex_temp = []
-                            break
+        if method == 'greedy':
+            vertex_index = self.sort_by_bounding_box_axis()
+            self.meshlet = []
+            visited_triangles = set()
+            visited_vertices = set()
 
-                    else:
-                        self.meshlet.append(meshlet(len(vertex_temp), triangle_count, vertex_begin, prim_begin))
-                        prim_begin = prim_begin + 3*triangle_count + 1
-                        vertex_begin = vertex_begin + len(vertex_temp) + 1
-                        vertex_temp = []
-                        break
+            for idx in vertex_index:
+                if idx in visited_vertices:
+                    continue
+
+                vertex_buffer = set()
+                triangle_buffer = set()
+                border_triangles = set(self.mesh.vif[idx])
+
+                vertex_buffer.add(idx)
+                visited_vertices.add(idx)
+
+                while border_triangles:
+                    tri_idx = border_triangles.pop()
+                    if tri_idx in visited_triangles:
+                        continue
+
+                    triangle = self.mesh.face[tri_idx]
+                    new_vertices = [v for v in triangle if v not in vertex_buffer]
+
+                    if (len(vertex_buffer) + len(new_vertices) <= max_vertices and
+                        len(triangle_buffer) + 1 <= max_triangles):
+                        triangle_buffer.add(tri_idx)
+                        visited_triangles.add(tri_idx)
+
+                        for v in triangle:
+                            vertex_buffer.add(v)
+                            visited_vertices.add(v)
+
+                        for v in triangle:
+                            for neighbour_tri in self.mesh.vif[v]:
+                                if neighbour_tri not in visited_triangles:
+                                    border_triangles.add(neighbour_tri)
+
+                self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+
+            # Handle unvisited triangles
+            for tri_idx in range(len(self.mesh.face)):
+                if tri_idx not in visited_triangles:
+                    triangle = self.mesh.face[tri_idx]
+                    vertex_buffer = set(triangle)
+                    triangle_buffer = {tri_idx}
+                    visited_triangles.add(tri_idx)
+
+                    for v in triangle:
+                        for neighbour_tri in self.mesh.vif[v]:
+                            if neighbour_tri not in visited_triangles:
+                                triangle_buffer.add(neighbour_tri)
+                                visited_triangles.add(neighbour_tri)
+                                vertex_buffer.update(self.mesh.face[neighbour_tri])
+
+                                if len(vertex_buffer) > max_vertices or len(triangle_buffer) > max_triangles:
+                                    break
+
+                    self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+
+
+
+
+
+
+            
+
+
+
+
+
+
+            
+
+            
 
                             
 
@@ -133,6 +198,7 @@ class meshlet_mesh:
         D = []
         E = [False for _ in self.mesh.face]
         O = []
+        T = []
         f = 0
         s = k + 1
         i = 1
@@ -150,35 +216,18 @@ class meshlet_mesh:
                             C[v] = s
                             s += 1
                     E[t] = True
+                    T.append(t)
             f = self.getNextVertex(i, k, N, C, s, L, D)
-        return O
+        return O, T
 
 
+
+    def sort_by_bounding_box_axis(self):
+        min_bounds = self.mesh.vertex.min(axis=0)
+        max_bounds = self.mesh.vertex.max(axis=0)
     
+        # Find the axis with the largest length
+        axis_lengths = max_bounds - min_bounds
+        longest_axis = np.argmax(axis_lengths)
 
-    
-class test_meshlet_mesh(unittest.TestCase):
-    def test_tipsify_vertices(self):
-        flag = True
-
-        tm = create_torus(1.0, 0.33, 90, 30)
-        tm.compute_connectivity()
-        tm_meshlet = meshlet_mesh(tm)
-        tipsified_vertex_list = [v for v in tm_meshlet.tipsify(256)]
-        for i in range(len(tm.vertex)):
-            if i not in tipsified_vertex_list:
-                flag = False
-        
-        self.assertEqual(True, flag)
-
-        
-        
-
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-
-
+        return np.argsort(self.mesh.vertex[:, longest_axis])

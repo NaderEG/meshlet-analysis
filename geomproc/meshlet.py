@@ -16,14 +16,17 @@ import math
 import random
 import os
 import unittest
+import json
 
 
 class meshlet:
-    def __init__(self, vertex_count, prim_count, vertex_begin, prim_begin):
-        self.vertex_count = vertex_count
-        self.prim_count = prim_count
-        self.vertex_begin = vertex_begin
-        self.prim_begin = prim_begin
+    def __init__(self, vertex_buffer, prim_buffer):
+        self.vertex_buffer = vertex_buffer      # contains the indices of vertices from mesh.vertex
+        self.prim_buffer = prim_buffer      # contains the indices of faces from mesh.face
+        
 
+
+    def print(self):
+        print(json.dumps(self.__dict__, indent=4))
         
 
