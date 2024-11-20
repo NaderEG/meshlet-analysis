@@ -9,13 +9,13 @@ def generate_random_rgb():
     """
     return np.array([random.randint(0, 255) for _ in range(3)])
 
-tm = gp.load('bunny.obj')
+tm = gp.load('firelink.obj')
 tm.fcolor = np.zeros((len(tm.face), 3), dtype=np.single)
 tm.normalize()
 tm.compute_connectivity()
 tm.compute_vertex_and_face_normals()
 
-tm_meshlet = tm.generate_meshlets('greedy')
+tm_meshlet = tm.generate_meshlets('nvidia')
 
 for meshlet in tm_meshlet.meshlet:
     color = generate_random_rgb()

@@ -17,6 +17,8 @@ import random
 import os
 import unittest
 
+
+from collections import deque
 from .creation import *
 from .mesh import *
 from .meshlet import *
@@ -75,65 +77,87 @@ class meshlet_mesh:
                 self.meshlet.append(meshlet(list(vertex_buffer), triangle_buffer))
 
         if method == 'greedy':
-            vertex_index = self.sort_by_bounding_box_axis()
-            self.meshlet = []
-            visited_triangles = set()
+            vertex_indices = self.sort_by_bounding_box_axis()
+            queue = deque()
             visited_vertices = set()
+            visited_triangles = set()
 
-            for idx in vertex_index:
+            self.meshlet = []
+
+            vertex_buffer = set()
+            triangle_buffer = set()
+
+            for idx in vertex_indices:
                 if idx in visited_vertices:
                     continue
 
-                vertex_buffer = set()
-                triangle_buffer = set()
-                border_triangles = set(self.mesh.vif[idx])
+                # Start a new meshlet
+                queue.append(idx)
+                border_vertices = set()
 
-                vertex_buffer.add(idx)
-                visited_vertices.add(idx)
+                while queue:
+                    curVertex = queue.popleft()
 
-                while border_triangles:
-                    tri_idx = border_triangles.pop()
-                    if tri_idx in visited_triangles:
-                        continue
+                    # Mark current vertex as visited
+                    visited_vertices.add(curVertex)
 
-                    triangle = self.mesh.face[tri_idx]
-                    new_vertices = [v for v in triangle if v not in vertex_buffer]
+                    for triangle in mesh.vif[curVertex]:
+                        if triangle in visited_triangles:
+                            continue
 
-                    if (len(vertex_buffer) + len(new_vertices) <= max_vertices and
-                        len(triangle_buffer) + 1 <= max_triangles):
-                        triangle_buffer.add(tri_idx)
-                        visited_triangles.add(tri_idx)
+                        # Collect all vertices for this triangle
+                        triangle_vertices = mesh.face[triangle]
+                        new_vertices = [v for v in triangle_vertices if v not in vertex_buffer]
 
-                        for v in triangle:
+                        # Check buffer limits before adding the triangle
+                        if len(vertex_buffer) + len(new_vertices) > max_vertices or len(triangle_buffer) + 1 > max_triangles:
+                            # Fill the meshlet with border triangles if possible
+                            for border_triangle in list(border_vertices):
+                                if set(mesh.face[border_triangle]).issubset(vertex_buffer):
+                                    triangle_buffer.add(border_triangle)
+                                    visited_triangles.add(border_triangle)
+                                    border_vertices.remove(border_triangle)
+
+                            # Finalize the current meshlet
+                            self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+
+                            # Start a new meshlet
+                            vertex_buffer = set()
+                            triangle_buffer = set()
+                            border_vertices = set()
+
+                            # Add the current vertex to the new meshlet
+                            queue.append(curVertex)
+                            break
+
+                        # Add the triangle and its vertices
+                        triangle_buffer.add(triangle)
+                        visited_triangles.add(triangle)
+                        for v in triangle_vertices:
                             vertex_buffer.add(v)
-                            visited_vertices.add(v)
+                            if v not in visited_vertices:
+                                queue.append(v)
 
-                        for v in triangle:
-                            for neighbour_tri in self.mesh.vif[v]:
-                                if neighbour_tri not in visited_triangles:
-                                    border_triangles.add(neighbour_tri)
+                    # Add current vertex's triangles to the border set
+                    for triangle in mesh.vif[curVertex]:
+                        if triangle not in visited_triangles:
+                            border_vertices.add(triangle)
 
-                self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
-
-            # Handle unvisited triangles
-            for tri_idx in range(len(self.mesh.face)):
-                if tri_idx not in visited_triangles:
-                    triangle = self.mesh.face[tri_idx]
-                    vertex_buffer = set(triangle)
-                    triangle_buffer = {tri_idx}
-                    visited_triangles.add(tri_idx)
-
-                    for v in triangle:
-                        for neighbour_tri in self.mesh.vif[v]:
-                            if neighbour_tri not in visited_triangles:
-                                triangle_buffer.add(neighbour_tri)
-                                visited_triangles.add(neighbour_tri)
-                                vertex_buffer.update(self.mesh.face[neighbour_tri])
-
-                                if len(vertex_buffer) > max_vertices or len(triangle_buffer) > max_triangles:
-                                    break
-
+                # Handle any remaining data in the buffers after the loop
+                if vertex_buffer or triangle_buffer:
                     self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+
+
+
+
+                    
+
+
+
+
+
+
+            
 
 
 
