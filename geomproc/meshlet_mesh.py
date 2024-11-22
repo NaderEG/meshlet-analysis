@@ -47,10 +47,11 @@ class meshlet_mesh:
 
     def __init__(self, mesh, method, max_vertices, max_triangles):
         self.mesh = mesh
+        self.meshlet = []
 
         if method == 'nvidia':
-            meshlet_vertices, meshlet_triangles = self.tipsify(15)
-            self.meshlet = []
+            meshlet_vertices, meshlet_triangles = self.tipsify(25)
+            
 
             vertex_buffer = set()
             triangle_buffer = []
@@ -77,94 +78,82 @@ class meshlet_mesh:
                 self.meshlet.append(meshlet(list(vertex_buffer), triangle_buffer))
 
         if method == 'greedy':
-            vertex_indices = self.sort_by_bounding_box_axis()
-            queue = deque()
-            visited_vertices = set()
-            visited_triangles = set()
+            vertex_list = self.sort_by_bounding_box_axis()
 
-            self.meshlet = []
+            used_vertices = set()
+            used_triangles = set()
 
             vertex_buffer = set()
             triangle_buffer = set()
+            local_border = set()
 
-            for idx in vertex_indices:
-                if idx in visited_vertices:
+            for idx in vertex_list:
+                if idx in used_vertices:
                     continue
 
                 # Start a new meshlet
-                queue.append(idx)
-                border_vertices = set()
+                local_border.add(idx)
 
-                while queue:
-                    curVertex = queue.popleft()
+                while local_border:
+                    # Select a vertex from the border (randomized choice for variety)
+                    curr = random.choice(list(local_border))
+                    local_border.remove(curr)
 
-                    # Mark current vertex as visited
-                    visited_vertices.add(curVertex)
+                    if curr in used_vertices:
+                        continue
 
-                    for triangle in mesh.vif[curVertex]:
-                        if triangle in visited_triangles:
+                    # Mark the vertex as used
+                    used_vertices.add(curr)
+
+                    # Process triangles connected to the current vertex
+                    for triangle in mesh.vif[curr]:
+                        if triangle in used_triangles:
                             continue
 
-                        # Collect all vertices for this triangle
                         triangle_vertices = mesh.face[triangle]
                         new_vertices = [v for v in triangle_vertices if v not in vertex_buffer]
 
-                        # Check buffer limits before adding the triangle
+                        # Check if adding this triangle exceeds buffer limits
                         if len(vertex_buffer) + len(new_vertices) > max_vertices or len(triangle_buffer) + 1 > max_triangles:
-                            # Fill the meshlet with border triangles if possible
-                            for border_triangle in list(border_vertices):
-                                if set(mesh.face[border_triangle]).issubset(vertex_buffer):
-                                    triangle_buffer.add(border_triangle)
-                                    visited_triangles.add(border_triangle)
-                                    border_vertices.remove(border_triangle)
+                            # Attempt to fill remaining space with border triangles
+                            if len(triangle_buffer) < max_triangles:
+                                for v in vertex_buffer:
+                                    for border_triangle in mesh.vif[v]:
+                                        if border_triangle in used_triangles:
+                                            continue
+                                        if set(mesh.face[border_triangle]).issubset(vertex_buffer):
+                                            triangle_buffer.add(border_triangle)
+                                            used_triangles.add(border_triangle)
 
                             # Finalize the current meshlet
-                            self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+                            self.meshlet.append(meshlet(vertex_buffer.copy(), triangle_buffer.copy()))
+                            vertex_buffer.clear()
+                            triangle_buffer.clear()
+                            local_border.clear()
 
-                            # Start a new meshlet
-                            vertex_buffer = set()
-                            triangle_buffer = set()
-                            border_vertices = set()
-
-                            # Add the current vertex to the new meshlet
-                            queue.append(curVertex)
+                            # Start a new meshlet with the current vertex
+                            local_border.add(curr)
                             break
 
                         # Add the triangle and its vertices
                         triangle_buffer.add(triangle)
-                        visited_triangles.add(triangle)
-                        for v in triangle_vertices:
-                            vertex_buffer.add(v)
-                            if v not in visited_vertices:
-                                queue.append(v)
+                        used_triangles.add(triangle)
+                        vertex_buffer.update(triangle_vertices)
 
-                    # Add current vertex's triangles to the border set
-                    for triangle in mesh.vif[curVertex]:
-                        if triangle not in visited_triangles:
-                            border_vertices.add(triangle)
+                        # Add new vertices to the border
+                        for vertex in triangle_vertices:
+                            if vertex not in used_vertices:
+                                local_border.add(vertex)
 
-                # Handle any remaining data in the buffers after the loop
+                # Finalize any remaining data in the buffers after the loop
                 if vertex_buffer or triangle_buffer:
-                    self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+                    self.meshlet.append(meshlet(vertex_buffer.copy(), triangle_buffer.copy()))
+                    vertex_buffer.clear()
+                    triangle_buffer.clear()
 
-
-
-
-                    
-
-
-
-
-
-
+        if method == 'min_curve':
             
 
-
-
-
-
-
-            
 
 
 
@@ -174,14 +163,8 @@ class meshlet_mesh:
             
 
             
-
                             
 
-
-
-                
-                
-                
 
 
 

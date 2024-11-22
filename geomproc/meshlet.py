@@ -20,10 +20,12 @@ import json
 
 
 class meshlet:
-    def __init__(self, vertex_buffer, prim_buffer):
+    def __init__(self, vertex_buffer=[], prim_buffer=[]):
         self.vertex_buffer = vertex_buffer      # contains the indices of vertices from mesh.vertex
         self.prim_buffer = prim_buffer      # contains the indices of faces from mesh.face
         
+    def is_full(self, max_vertices, max_triangles):
+        return len(self.vertex_buffer) == max_vertices, len(self.prim_buffer) == max_triangles
 
 
     def print(self):

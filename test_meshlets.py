@@ -9,7 +9,7 @@ def generate_random_rgb():
     """
     return np.array([random.randint(0, 255) for _ in range(3)])
 
-tm = gp.load('firelink.obj')
+tm = gp.load('bunny.obj')
 tm.fcolor = np.zeros((len(tm.face), 3), dtype=np.single)
 tm.normalize()
 tm.compute_connectivity()
