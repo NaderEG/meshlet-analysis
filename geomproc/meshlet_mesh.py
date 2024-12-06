@@ -1,3 +1,10 @@
+# All code was initially written by Nader El-Ghotmi
+# But was then sometimes reviewed, refined, or editied by ChatGPT.
+# This file also contains the initial implementation of a bounding sphere
+# Algorithm but I was not able to complete it in time.
+
+
+
 #
 # GeomProc: geometry processing library in python + numpy
 #
@@ -16,9 +23,11 @@ import math
 import random
 import os
 import unittest
+import sys
 
 
 from collections import deque
+from collections import defaultdict
 from .creation import *
 from .mesh import *
 from .meshlet import *
@@ -152,6 +161,163 @@ class meshlet_mesh:
                     triangle_buffer.clear()
 
         if method == 'min_curve':
+            meshlet_vertices, meshlet_triangles = self.tipsify(25)
+            visited_triangles = set()
+            border_triangles = []
+
+            for triangle in meshlet_triangles:
+                # If we have border triangles, prioritize them
+                if border_triangles:
+                    triangle = border_triangles.pop(0)
+                    if triangle in visited_triangles:
+                        continue
+                elif triangle in visited_triangles:
+                    # Fallback to the next unvisited triangle if no valid border exists
+                    continue
+
+                # Initialize buffers for the new meshlet
+                vertex_buffer = set(self.mesh.face[triangle])
+                triangle_buffer = {triangle}
+                visited_triangles.add(triangle)
+
+                # Calculate the average normal for the initial triangle
+                avg_normal = self.mesh.fnormal[triangle]
+
+                # Maintain candidate triangles and normals
+                candidate_triangles = []
+                candidate_normals = []
+
+                while len(vertex_buffer) < max_vertices and len(triangle_buffer) < max_triangles:
+                    # Collect new candidates from the current meshlet boundary
+                    for tri in triangle_buffer:
+                        for adj_tri in self.mesh.fif[tri]:
+                            if adj_tri not in visited_triangles and adj_tri not in candidate_triangles:
+                                candidate_triangles.append(adj_tri)
+                                candidate_normals.append(self.mesh.fnormal[adj_tri])
+
+                    # Break if no valid candidates are found
+                    if not candidate_triangles:
+                        break
+
+                    # Find the closest normal to the current average
+                    closest_normal, closest_idx = self.find_closest_normal(avg_normal, candidate_normals)
+                    selected_triangle = candidate_triangles.pop(closest_idx)
+                    candidate_normals.pop(closest_idx)
+
+                    # Update the average normal
+                    avg_normal = self.weighted_mean_vector(avg_normal, closest_normal, len(triangle_buffer))
+
+                    # Add the selected triangle and its vertices to the buffers
+                    triangle_buffer.add(selected_triangle)
+                    visited_triangles.add(selected_triangle)
+                    for v in self.mesh.face[selected_triangle]:
+                        vertex_buffer.add(v)
+
+                    # Update the border: Add neighbors of the new triangle if not visited
+                    for adj_tri in self.mesh.fif[selected_triangle]:
+                        if adj_tri not in visited_triangles and adj_tri not in candidate_triangles:
+                            border_triangles.append(adj_tri)
+
+                # Finalize the current meshlet
+                self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+
+                # Clean up the border: Remove triangles that were added to the meshlet
+                border_triangles = [tri for tri in border_triangles if tri not in triangle_buffer]
+            
+        if method == 'bounding_sphere':
+            epsilon = 0.0001
+            vertex_list = self.sort_by_bounding_box_axis()
+            radius = 0
+            center = np.array([0, 0, 0])
+            used_vertices = set()
+            used_triangles = set()
+
+            for vertex in vertex_list:
+                if vertex in used_vertices:
+                    continue
+
+                vertex_buffer = set()
+                triangle_buffer = set()
+                border = set(self.mesh.vif[vertex])
+                best_triangle = None
+                new_vertex = -1
+                new_radius = sys.float_info.max
+                best_new_radius = new_radius - 1
+                vertex_score = 0
+                best_vertex_score = 0
+
+                for triangle in border:
+                    if triangle in used_triangles:
+                        continue
+                    for vert in self.mesh.face[triangle]:
+                        if vert in vertex_buffer:
+                            vertex_score+=1
+                        else:
+                            new_vertex = vertex
+                    
+                    if vertex_score == 3:
+                        new_radius = radius
+                    elif vertex_score == 1:
+                        continue
+                    else:
+                        new_radius = 0.5*np.linalg.norm(radius + radius - self.mesh.vertex[vertex])
+                    triangle_count = 0
+                    for tri in self.mesh.fif[triangle]:
+                        if tri in triangle_buffer:
+                            triangle_count+=1
+                    if len(self.mesh.fif[triangle]) == triangle_count:
+                        vertex_score+=1
+                    if vertex_score >= best_vertex_score or new_radius <= best_new_radius:
+                        best_vertex_score = vertex_score
+                        best_new_radius = new_radius
+                        best_triangle = triangle
+                if best_triangle == None:
+                    for triangle in self.mesh.vif[vertex]:
+                        if triangle in used_triangles:
+                            continue
+                        best_triangle = triangle
+                        center = 0
+                        for v in self.mesh.face[best_triangle]:
+                            center+=self.mesh.vertex[v]
+                        center = center/3
+                        best_new_radius = max((max(center - self.mesh.vertex[self.mesh.face[best_triangle][0]]), 
+                        max(center - self.mesh.vertex[self.mesh.face[best_triangle][1]]), 
+                        max(center - self.mesh.vertex[self.mesh.face[best_triangle][2]])))
+
+                if best_triangle ==  None:
+                    continue
+                radius = best_new_radius
+                center = vertex_list[new_vertex] + (radius / (epsilon + np.linalg.norm(center - self.mesh.vertex[new_vertex]))) * (self.mesh.vertex[new_vertex] - center)
+                if len(vertex_buffer) >= max_vertices:
+                    if len(triangle_buffer) < max_triangles:
+                        for triangle in border:
+                            if set(self.mesh.face[triangle]).issubset(vertex_buffer):
+                                triangle_buffer.add(triangle)
+                                border.remove(triangle)
+                                used_triangles.add(triangle)
+                                border.update(self.mesh.fif[triangle])
+                                vertex_buffer.update(self.mesh.face[triangle])
+                    self.meshlet.append(meshlet(list(vertex_buffer), list(triangle_buffer)))
+                    continue
+                triangle_buffer.add(triangle)
+                vertex_buffer.update(self.mesh.face[triangle])
+                used_triangles.add(triangle)
+                used_vertices.add()
+                border.remove(triangle)
+                border.update(self.mesh.fif[triangle])
+
+
+
+
+
+
+
+
+
+
+                
+
+
             
 
 
@@ -161,6 +327,91 @@ class meshlet_mesh:
 
 
             
+
+
+    def to_obj(self, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+        meshlets_dir = os.path.join(output_dir, "meshlets")
+        os.makedirs(meshlets_dir, exist_ok=True)
+
+        for file in os.listdir(meshlets_dir):
+            file_path = os.path.join(meshlets_dir, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+
+        for i, meshlet in enumerate(self.meshlet):
+            global_vertex_indices = meshlet.vertex_buffer
+            global_face_indices = meshlet.prim_buffer
+
+            local_vertex_mapping = {v: idx + 1 for idx, v in enumerate(global_vertex_indices)}
+
+            local_vertices = [self.mesh.vertex[v] for v in global_vertex_indices]
+
+            local_triangles = []
+            for face_idx in global_face_indices:
+                global_face = self.mesh.face[face_idx]
+                local_triangles.append(tuple(local_vertex_mapping[v] for v in global_face))
+
+            filename = os.path.join(meshlets_dir, f"meshlet_{i+1}.obj")
+
+            with open(filename, 'w') as obj_file:
+                for vertex in local_vertices:
+                    obj_file.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
+
+                for triangle in local_triangles:
+                    obj_file.write(f"f {triangle[0]} {triangle[1]} {triangle[2]}\n")
+
+
+    def to_ply(self, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        for meshlet in self.meshlet:
+            color = self.generate_random_rgb()
+            for face in meshlet.prim_buffer:
+                self.mesh.fcolor[face] = color
+        wo = write_options()
+        wo.write_face_colors = True
+        self.mesh.save(output_dir+'/output.ply', wo)
+
+
+        
+    
+    def generate_random_rgb(self):
+        """
+        Generate a random RGB value and return it as a NumPy array of size 3.
+        """
+        return np.array([random.randint(0, 255) for _ in range(3)])
+    
+    def average_triangles(self):
+        total_tris = 0
+        for meshlet in self.meshlet:
+            total_tris += len(meshlet.prim_buffer)
+
+        return total_tris/len(self.meshlet)
+    
+    def average_vertices(self):
+        total_verts = 0
+        for meshlet in self.meshlet:
+            total_verts += len(meshlet.vertex_buffer)
+
+        return total_verts/len(self.meshlet)
+    
+    def shared_vertices(self):
+        vertex_occurrences = defaultdict(int)
+
+        # Count how many times each vertex appears in the meshlets
+        for meshlet in self.meshlet:
+            for vertex in meshlet.vertex_buffer:
+                vertex_occurrences[vertex] += 1
+
+        # Count vertices that appear in more than one meshlet
+        shared_vertices = sum(1 for count in vertex_occurrences.values() if count > 1)
+
+        return shared_vertices
+
+
+
+
 
             
                             
@@ -238,3 +489,21 @@ class meshlet_mesh:
         longest_axis = np.argmax(axis_lengths)
 
         return np.argsort(self.mesh.vertex[:, longest_axis])
+
+    def find_closest_normal(self, avg_normal, candidate_normals):
+        # Normalize candidate normals (in case they are not unit vectors)
+        normalized_candidates = candidate_normals / np.linalg.norm(candidate_normals, axis=1)[:, np.newaxis]
+
+        # Compute dot products
+        dot_products = np.dot(normalized_candidates, avg_normal)
+
+        # Find the index of the maximum dot product
+        closest_index = np.argmax(dot_products)
+
+        # Return the closest normal index
+        return candidate_normals[closest_index], closest_index
+
+    def weighted_mean_vector(self, v1, v2, n):
+        weighted_sum = n * np.array(v1) + np.array(v2)
+        mean_vector = weighted_sum / np.linalg.norm(weighted_sum)
+        return mean_vector
